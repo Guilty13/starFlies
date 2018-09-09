@@ -4,75 +4,111 @@
 <title>Корабли</title>
 
 <canvas id = "main"></canvas>
+<div id = "wtf"></div>
 
 <script> 
-let a = 0
-fly = {
-    "x": 0.5,
-    "y": -0.5,
-    "angle" : 0,
-    "speed" : 0.1,
-    "x_to" : 3,
-    "y_to" : 3
-}  
-allFly = [fly]
-function goTo(who,x,y) {
-    who.x_to = x;
-    who.y_to = y;
-}
-function goGo(who) {
-    let where = {
-        "x": who.x_to,
-        "y": who.y_to
-    }
-    let x = where.x - who.x
-    let y = where.y - who.y
- //   if(Math.abs(x) < 0.01 && Math.abs(y) < 0.01) {a = 1; return 0} // нельзя перенаправить будет потом, зато не крутиться
-    who.angle = Math.acos(x/Math.sqrt(x*x+y*y))*(Math.abs(y)/y)
-    setTimeout(function() {
-        let x = where.x - who.x
-        let y = where.y - who.y
-        who.x += 1 / Math.sqrt(x*x+y*y) * who.speed * x 
-        who.y += 1 / Math.sqrt(x*x+y*y) * who.speed * y
-        goGo(who,where) 
-        }, 1000/60)
-}
-target = {
-    "x": 3,
-    "y": 3
-}
-goGo(fly,target);
-//прорисовка    
-window.onload = main
-
-function main() {
-    let gl = initCanvas("main")
-    let program = initShaders(gl)
-    let posIndex = gl.getAttribLocation(program, 'pos')
-    let fooIndex = gl.getAttribLocation(program, 'foo')
-    gl.useProgram(program)
     
-    let count = initData(gl, posIndex, fooIndex)
-    draw(gl,program,count);
+class TCoords {
+    constructor(x,y) {
+        this.x = x
+        this.y = y
+    }
+} 
+
+function plus(a,b) {
+    return new TCoords(a.x+b.x, a.y+b.y)
+} 
+function multiply(a, c) {
+    return new TCoords(a.x*c, a.y*c) 
 }
 
-function draw(gl,program,count){
+class TFlight {
+    constructor(coords, speed) {
+        this.coords = coords
+        this.speed = speed
+    }
+    moveBySpeed(time) {
+        this.coords = plus(this.coords, multiply(this.speed, time))
+    }
+    move(x,y) {
+        this.coords = plus(this.coords,new TCoords(x,y)) 
+    }
+    boost(x,y) {
+        this.speed = plus(this.speed,new TCoords(x,y))
+    }
+}
+function moveByMoves(fly, moves, time) {
+    let i = 0
+    let dtime = 0
+    dtime += time;
+    let dfly = new TFlight(fly.coords, fly.speed)
+    while (true) {
+        if(moves[3*i +2] < dtime) {
+            dfly.moveBySpeed(moves[3*i+2])
+            dfly.move(moves[3*i]*moves[3*i +2]*moves[3*i +2]/2,moves[3*i+1]*moves[3*i +2]*moves[3*i +2]/2)
+            dfly.boost(moves[3*i]*moves[3*i +2], moves[3*i+1]*moves[3*i +2])
+            dtime -= moves[3*i +2]
+            i++
+        } else {
+            dfly.moveBySpeed(dtime)
+            dfly.move(moves[3*i]*dtime*dtime/2,moves[3*i+1]*dtime*dtime/2)
+            dfly.boost(moves[3*i]*dtime, moves[3*i+1]*dtime)
+            break
+        }
+        if(3*i+2 > moves.length) {
+            console.log("move bug: too much time")
+            break
+        }
+     }
+     return dfly
+}
+let a = 0
+ 
+function trigger(flight, moves, time,gl,programFlights,countFlights) {
+    draw(gl,programFlights,countFlights, [moveByMoves(flight,moves,time)]);
+    setTimeout(function() {trigger(flight, moves, time+0.1,gl,programFlights,countFlights )  }, 1000/60)
+}
+ 
+window.onload = main
+function main() {
+    let flight1 = new TFlight(new TCoords(-10,-7), new TCoords(3,-1))
+    allFlights = [flight1];
+    //прорисовка   
+    let gl = initCanvas("main")
+    
+    let programFlights = initShadersFlights(gl)
+    let posIndexFlights = gl.getAttribLocation(programFlights, 'pos')
+    let fooIndexFlights = gl.getAttribLocation(programFlights, 'foo')
+  
+    let programCircles = initShadersCircles(gl)
+    let posIndexCircles = gl.getAttribLocation(programCircles, 'pos')
+    let fooIndexCircles = gl.getAttribLocation(programCircles, 'foo')
+    
+    gl.useProgram(programFlights)
+    let x = Math.sqrt(3)/6
+    let positionsFlights = [ 0.,2*x, 1, 0., 0., 0.,
+                                            0.5,-x, 1, 1., 0., 0.,
+                                           -0.5,-x, 1, 0., 0., 0.];
+    let positionsCircles = [ 0.,2*x, 1, 0., 2*x, 0.,
+                                             0.5,-x, 1, 0.5, 0., 0.,
+                                            -0.5,-x, 1, 0., 0., 0.];
+    let countFlights = initData(gl, posIndexFlights, fooIndexFlights, positionsFlights)
+    let countCircles = initData(gl, posIndexCircles, fooIndexCircles, positionsCircles)
+    // /прорисовка
+  //  draw(gl,programFlights,countFlights, allFlights);
+    trigger(flight1, [-0.293768,0.955877,1.054081,-0.395617,0.918415,1.054251,-0.571914,0.820314,0.867024,-0.672854,0.597532,0.638658,-0.66361,0.242045,0.599258,-0.60355,-0.542954,0.975833,-0.213272,-0.976993,1.67184,0,0,10], 0, gl, programFlights, countFlights)
+}
+function draw(gl,program,count, allFlights){
     gl.clear(gl.COLOR_BUFFER_BIT)
-    for(let i = 0; i < allFly.length; i++) {
-            gl.uniform2f(gl.getUniformLocation(program, 'realPos'), allFly[i].x, allFly[i].y)
-            gl.uniform1f(gl.getUniformLocation(program, 'alpha'), allFly[i].angle)
+    for(let i = 0; i < allFlights.length; i++) {
+            gl.uniform2f(gl.getUniformLocation(program, 'realPos'), allFlights[i].coords.x, allFlights[i].coords.y)
+            gl.uniform1f(gl.getUniformLocation(program, 'alpha'), 0)
             drawData(gl,count)
     }
-    setTimeout(function() {draw(gl,program,count)}, 1000/60)
+ //   setTimeout(function() {draw(gl,program,count, allFlights)}, 1000/60)
 }
-
-function initData(gl, posIndex, fooIndex) {
+function initData(gl, posIndex, fooIndex, positions) {
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
-    let x = Math.sqrt(3)/6
-    let positions = [ 0.,2*x, 1, 0., 0., 0.,
-                      0.5,-x, 1, 1., 0., 0.,
-                     -0.5,-x, 1, 0., 0., 0.];
-
     gl.bufferData(gl.ARRAY_BUFFER, 
                   new Float32Array(positions), 
                   gl.STATIC_DRAW)
@@ -83,7 +119,7 @@ function initData(gl, posIndex, fooIndex) {
                            false, 
                            24,
                            0)
-    gl.enableVertexAttribArray(posIndex)  
+    gl.enableVertexAttribArray(posIndex)
                          
     gl.vertexAttribPointer(fooIndex,
                            3,
@@ -92,19 +128,14 @@ function initData(gl, posIndex, fooIndex) {
                            24,
                            12)
     gl.enableVertexAttribArray(fooIndex)
-
                            
     
     let count = positions.length / 6
     return count                
 }
-
 function drawData(gl,count) {
     gl.drawArrays(gl.TRIANGLES, 0, count)
 }
-
-
-
 function initCanvas(id) {
     let elem = document.getElementById(id)
     elem.width = 720
@@ -112,16 +143,15 @@ function initCanvas(id) {
     
     let gl = elem.getContext("webgl")
     
-    gl.clearColor(0,1,0,1)
+    gl.clearColor(0,1,0,1) // param
     gl.clear(gl.COLOR_BUFFER_BIT)
     
     return gl;
 }
 /////////////SHADERS BEGIN
-let VS_SRC = `
+let VS_SRC_FLIGHTS = `
 attribute vec3 pos;
 attribute vec3 foo;
-
 varying vec3 fs_foo;
 
 uniform vec2 realPos;
@@ -135,15 +165,37 @@ vec2 rotate(float x, float y){
     angle+=alpha + 3.14/6.;
     return vec2(cos(angle)*changing,sin(angle)*changing);
 }
+
 void main() {
     vec2 truePos = rotate(pos.x,pos.y);
-    gl_Position = vec4(realPos.x+truePos.x,realPos.y+truePos.y,0.,pos.z*5.);
+    float size = 10.; // param
+    gl_Position = vec4(realPos.x+truePos.x,realPos.y+truePos.y,0.,pos.z*size);
     fs_foo = foo;
 }
 `
+let PS_SRC_FLIGHTS = `
+precision mediump float;
+varying vec3 fs_foo;
 
-let PS_SRC = `
+void main() {
+    gl_FragColor = vec4(fs_foo.r,fs_foo.g,fs_foo.b,1.);
+}
+`
 
+let VS_SRC_CIRCLE = `
+attribute vec3 pos;
+attribute vec3 foo;
+varying vec3 fs_foo;
+
+uniform vec2 realPos;
+
+void main() {
+    float size = 5.; // param
+    gl_Position = vec4(realPos.x+pos.x,realPos.y+pos.y,0.,pos.z*size); 
+    fs_foo = foo;
+}
+`
+let PS_SRC_CIRCLE = `
 precision mediump float;
 varying vec3 fs_foo;
 
@@ -152,16 +204,39 @@ void main() {
 }
 `
 ///////////////SHADERS END
-function initShaders(gl) {
+function initShadersFlights(gl) {
     let vs = gl.createShader(gl.VERTEX_SHADER)
-    gl.shaderSource(vs, VS_SRC)
+    gl.shaderSource(vs, VS_SRC_FLIGHTS)
+    gl.compileShader(vs)
+    
+    let vsLog = gl.getShaderInfoLog(vs)
+    if (vsLog) {wtf.innerHTML += vsLog;}
+    
+    let fs = gl.createShader(gl.FRAGMENT_SHADER)
+    gl.shaderSource(fs, PS_SRC_FLIGHTS)
+    gl.compileShader(fs)
+    
+    let fsLog = gl.getShaderInfoLog(fs)
+    if (fsLog) {wtf.innerHTML += fsLog;}
+    
+    let program = gl.createProgram()
+    gl.attachShader(program, vs)
+    gl.attachShader(program, fs)
+    gl.linkProgram(program)
+    
+    return program
+}
+
+function initShadersCircles(gl) {
+    let vs = gl.createShader(gl.VERTEX_SHADER)
+    gl.shaderSource(vs, VS_SRC_CIRCLE)
     gl.compileShader(vs)
     
     let vsLog = gl.getShaderInfoLog(vs)
     if (vsLog) {console.log(vsLog);}
     
     let fs = gl.createShader(gl.FRAGMENT_SHADER)
-    gl.shaderSource(fs, PS_SRC)
+    gl.shaderSource(fs, PS_SRC_CIRCLE)
     gl.compileShader(fs)
     
     let fsLog = gl.getShaderInfoLog(fs)
@@ -173,11 +248,5 @@ function initShaders(gl) {
     gl.linkProgram(program)
     
     return program
-
 }
-
-
-
-
-
 </script>
