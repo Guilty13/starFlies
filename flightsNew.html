@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+
+<meta charset="utf8">
+<title>Корабли</title>
+
+<canvas id = "main"></canvas>
+<div id = "wtf"></div>
+<textarea id="textarea" rows="10"></textarea>
+
+<script> 
+//constants
+mapSizeWidth =  720
+mapSizeHeight = 720
+timeGlobal = 0
+mapCoordX = 0 // center
+mapCoordY = 0 // center
+frameRate = 30 // per sec
+timeRate = 60 // per sec
+pastCirclesRate = 6 // needed timeRates
+pastCirclesCount = 100
+timeStep = 60 // interval between times (per sec)
+
+function combineArrays(x, y) {
+    let a = x.slice();
+    for(let i =0; i<y.length; i++) {
+        a[a.length] = y[i];
+    }
+    return a;
+}
+
+// pereproverit* wait v samoletah
+class TCoords {
+    constructor(x,y) {
+        this.x = x
+        this.y = y
+    }
+} 
+
+function plus(a,b) {
+    return new TCoords(a.x+b.x, a.y+b.y)
+} 
+function multiply(a, c) {
+    return new TCoords(a.x*c, a.y*c) 
+}
+function cZero() {
+    return new TCoords(0,0)
+}
+function copyTCoords(x) {
+    return new TCoords(x.x, x.y)
+}
+
+
+
+class TFlight {
+    constructor(coords, speed, stackDSpeed)       {
+        this.coords = copyTCoords(coords)
+        this.speed = copyTCoords(speed)
+        this.stackDSpeed = stackDSpeed  // [dspeed.x1, .y1 , time1, ...] default - (0,0) 
+        this.past = [ ];
+        for(let i = 0; i < pastCirclesCount; ++i ) {
+        this.past[3*i] = coords.x
+        this.past[3*i +1] = coords.y
+        this.past[3*i + 2] = timeGlobal
+        } // menyat* copipastu
+    }
+    putCircle() { // vozmojni problemi s copypastoi
+        let a = [ ]
+        for(let i = 3; i < this.past.length; ++i) {
+            a[(i-3)] = this.past[i]
+        }
+        a[a.length] = this.coords.x
+        a[a.length] = this.coords.y
+        a[a.length] = timeGlobal;
+        this.past = a.slice();
+    }
+    
+    waitHelper(dSpeed, time) {
+        this.coords = plus(this.coords, plus(multiply(this.speed, time),multiply(dSpeed, time*time/2)))
+        this.speed = plus(this.speed, multiply(dSpeed, time))
+    }
+    
+    wait(time) {
+        let tTime = 0 + time;
+        for(let i = 0; i < this.stackDSpeed.length/3; ++i) 
+        {
+            if(tTime <= this.stackDSpeed[3*i+2]) 
+            {
+                this.waitHelper(new TCoords(this.stackDSpeed[3*i],this.stackDSpeed[3*i+1]), tTime)
+                this.stackDSpeed[3*i+2] -= tTime;
+                tTime = 0;
+                break;
+            }
+            this.waitHelper(new TCoords(this.stackDSpeed[3*i],this.stackDSpeed[3*i+1]), this.stackDSpeed[3*i+2])
+           this.stackDSpeed[3*i] = 0;
+            this.stackDSpeed[3*i+1] = 0;
+            tTime -= this.stackDSpeed[3*i+2]
+            this.stackDSpeed[3*i+2] = 0
+        }
+        this.waitHelper(new TCoords(0,0), tTime);
+    }
+    
+    addRoute(x) {
+        this.stackDSpeed = combineArrays(this.stackDSpeed, x)
+    }
+    
+    replaceRoute(x) {
+        this.stackDSpeed = x.slice()
+    }
+    
+    debugMove(x,y) {
+        this.coords = plus(this.coords,new TCoords(x,y)) 
+    }
+    
+    debugBoost(x,y) {
+        this.dSpeed = plus(this.dSpeed,new TCoords(x,y))
+    }
+}
+
+function copyFlight(x) { // menyat pri poyavlenii novih peremennih
+    let ans = new TFlight(x.coords, x.speed, x.stackDSpeed)
+    ans.past = x.past;
+    return ans;
+}
+
+//globals
+let aha = [-0.293768,0.955877,1.054081,-0.395617,0.918415,1.054251,-0.571914,0.820314,0.867024,-0.672854,0.597532,0.638658,-0.66361,0.242045,0.599258,-0.60355,-0.542954,0.975833,-0.213272,-0.976993,1.67184,0,0,10]
+let flight1 = new TFlight(new TCoords(0,0), new TCoords(3,-1), aha)
+allFlights = [flight1];
+let a = 0
+//clickGlobals
+clickedFlightID = -1;
+predictedRouteExists = false;
+predictedRoute = [ ]
+ 
+ 
+window.onload = main
+//window.onclick = clickReaction // onclick(?)
+function addScript(src) {
+  var elem = document.createElement("script");
+  elem.src = src;
+  document.head.appendChild(elem);
+}
+
+function jsonp(json) {
+    document.getElementById("textarea").value =
+          json.route;
+    //    JSON.stringify(json);
+}
+
+function go(id, coords) {
+    var x0 = allFlights[id].coords.x
+    var y0 = allFlights[id].coords.y
+    var vx0 = coords.x
+    var vy0 = coords.y
+    addScript("http://mss.druxa.ru:28080/compute.jsonp" +
+        "?callback=jsonp" +
+        "&x0=" + x0 + 
+        "&y0=" + y0 +
+        "&vx0=" + vx0 + 
+        "&vy0=" + vy0);
+} 
+
+
+function clickReaction(x, y) {
+    if(x <= mapSizeWidth && y <= mapSizsHeight) {clickMapReaction(x,y); return;} else {clickPanelReaction(x,y);}
+}
+
+function clickMapReaction(x,y) {
+    if(clickedFlightID != -1 && clickRightButton) { // ?????
+        // fix preRoute
+        clickedFlightID = -1;
+        return ;
+    }
+    if(clickLeftButton) {
+        if(clickedFlightID == -1) {
+            clickedFlightID = searchFlight(x, y)
+            return;
+        }
+        if(clickedFlightID != -1) {
+                presictedRoute =  searchRoute(clickedFlightID, x, y);
+                predictedRouteExists = true;
+        }
+    }
+}
+function searchRoute(id, coords) {
+    go(id, coords)
+
+    newRoute = [];
+    return newRoute
+}
+
+function clickPanelReaction(x,y) {
+    if(predictedRouteExists) {
+        allFlights[clickedFlightID].replaceRoute(predictedRoute)
+         predictedRouteExists = false;
+         clickedFlightID = -1;
+    }
+}
+
+function main() {
+    //прорисовка   
+    let goods = {};
+    goods.gl = initCanvas("main")
+    goods.programCircles = initShadersCircles(goods.gl)
+    goods.posIndexCircles = goods.gl.getAttribLocation(goods.programCircles, 'pos')
+    goods.fooIndexCircles = goods.gl.getAttribLocation(goods.programCircles, 'foo')
+    goods.gl.useProgram(goods.programCircles)
+    
+    let x = Math.sqrt(3)/6
+    goods.positionsCircles = [ 0.,2*x, 1, 0., 0, 1.,
+                                             0.5,-x, 1, 0.5, 0, 1.,
+                                            -0.5,-x, 1, 0.5,0.,1.];
+    goods.countCircles = initData(goods.gl, goods.posIndexCircles, goods.fooIndexCircles, goods.positionsCircles)
+    go(0, new TCoords(0,0));
+   drawAll(goods);
+   timeGo(goods);
+}
+
+function drawDefault(goods) {
+    goods.gl.clearColor(0,0,0,1)
+    goods.gl.clear(goods.gl.COLOR_BUFFER_BIT)
+  //  wtf.innerHTML = timeGlobal + " " + allFlights[0].coords.x + " " + allFlights[0].coords.y + " " + allFlights[0].stackDSpeed + " " + allFlights[0].past
+}
+
+//todo: sdelat* po normal*nomu
+function drawCircle(coords, size, goods) {
+    goods.gl.uniform2f(goods.gl.getUniformLocation(goods.programCircles, 'realPos'), coords.x, coords.y)
+    goods.gl.uniform1f(goods.gl.getUniformLocation(goods.programCircles, 'size'), size)
+    drawData(goods.gl,goods.countCircles);
+}
+
+function drawAll(goods) {
+    drawDefault(goods);
+    for(let i = 0; i < allFlights.length; ++i) {
+        drawCircle(allFlights[i].coords,2,goods) // parametri dlya korablya 
+        
+        for(let j = 0; j < pastCirclesCount; ++j) {
+            drawCircle(new TCoords(allFlights[i].past[3*j], allFlights[i].past[3*j+1]), 0.5, goods) // params dlya sledov   
+        } 
+    }   /*
+    if(clickedFlightID != -1) {
+        drawCircle( allFlights[clickedFlightID].coords, 0.5, goods) //!!!
+    } */
+    setTimeout(function() {drawAll(goods);}, 1000/ frameRate);
+}
+
+function timeGo(goods) {
+    for(let i = 0; i<allFlights.length; ++i) {
+        allFlights[i].wait(1/timeStep);
+    }
+    if(timeGlobal % pastCirclesRate == 0) {
+        for(let i = 0; i<allFlights.length; ++i) {
+            allFlights[i].putCircle();
+        }
+    }
+    timeGlobal++;
+    setTimeout(function() {timeGo(goods);}, 1000/ timeRate);
+}
+
+function initData(gl, posIndex, fooIndex, positions) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
+    gl.bufferData(gl.ARRAY_BUFFER, 
+                  new Float32Array(positions), 
+                  gl.STATIC_DRAW)
+    
+    gl.vertexAttribPointer(posIndex,
+                           3,
+                           gl.FLOAT,
+                           false, 
+                           24,
+                           0)
+    gl.enableVertexAttribArray(posIndex)
+                         
+    gl.vertexAttribPointer(fooIndex,
+                           3,
+                           gl.FLOAT,
+                           false, 
+                           24,
+                           12)
+    gl.enableVertexAttribArray(fooIndex)
+                           
+    
+    let count = positions.length / 6
+    return count
+}
+
+function drawData(gl,count) {
+    gl.drawArrays(gl.TRIANGLES, 0, count)
+}
+
+function initCanvas(id) {
+    let elem = document.getElementById(id)
+    elem.width = mapSizeWidth
+    elem.height = mapSizeHeight
+    
+    let gl = elem.getContext("webgl")
+    
+    gl.clearColor(1,0,0,1) // param
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    
+    return gl;
+}
+/////////////SHADERS BEGIN
+let VS_SRC_CIRCLE = `
+attribute vec3 pos;
+attribute vec3 foo;
+varying vec3 fs_foo;
+varying vec3 fs_pos;
+
+uniform vec2 realPos;
+uniform float size;
+
+void main() {
+        gl_Position = vec4((realPos.x+pos.x*size)/10.,(realPos.y+pos.y*size)/10.,0.,pos.z+1.); 
+    fs_foo = foo;
+    fs_pos = pos;
+}
+`
+let PS_SRC_CIRCLE = `
+precision mediump float;
+varying vec3 fs_foo;
+varying vec3 fs_pos;
+
+void main() {
+    if(fs_pos.x*fs_pos.x + fs_pos.y*fs_pos.y < 0.05) {
+   //     gl_FragColor = vec4(fs_foo.r,fs_foo.g,fs_foo.b,1.);
+        gl_FragColor = vec4(1.,1.,0.,1.);
+    } else {
+        discard;
+    }
+}
+`
+///////////////SHADERS END
+
+function initShadersCircles(gl) {
+    let vs = gl.createShader(gl.VERTEX_SHADER)
+    gl.shaderSource(vs, VS_SRC_CIRCLE)
+    gl.compileShader(vs)
+    
+    let vsLog = gl.getShaderInfoLog(vs)
+    if (vsLog) {console.log(vsLog);}
+    
+    let fs = gl.createShader(gl.FRAGMENT_SHADER)
+    gl.shaderSource(fs, PS_SRC_CIRCLE)
+    gl.compileShader(fs)
+    
+    let fsLog = gl.getShaderInfoLog(fs)
+    if (fsLog) {console.log(fsLog);}
+    
+    let program = gl.createProgram()
+    gl.attachShader(program, vs)
+    gl.attachShader(program, fs)
+    gl.linkProgram(program)
+    
+    return program
+}
+</script>
