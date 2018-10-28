@@ -1,7 +1,11 @@
+#include "stars.h"
+
 #include <vector>
 #include <iostream>
 #include <cmath>
 #include <utility>
+
+#include <stdlib.h>
 using namespace std;
 
 template<class T>
@@ -273,8 +277,16 @@ TVariation<TTFloat> AutoDerivative(TTFunc f, const vector<TTFloat>& x) {
 template <class T>
 struct TPointRef {
     // TODO: T x[D];
-    const T& x;
-    const T& y;
+    //const T& x;
+    //const T& y;
+    T& x;
+    T& y;
+
+    TPointRef<T>& operator =(const TPointRef<T>& p) {
+        x = p.x;
+        y = p.y;
+        return *this;
+    }
 };
 
 template <class T>
@@ -283,14 +295,29 @@ struct TPoint {
     T x;
     T y;
 
-    operator TPointRef<T>() const {
+    operator TPointRef<T>() {
         return {x,y};
     }
 };
 
 template <class T>
+TPoint<T> operator -(TPointRef<T> p) {
+    return {-p.x, -p.y};
+}
+
+template <class T>
+TPoint<T> operator -(TPoint<T> p) {
+    return {-p.x, -p.y};
+}
+
+template <class T>
 TPoint<T> operator *(T c, typename TId<TPointRef<T>>::TType p) {
     return {c * p.x, c * p.y};
+}
+
+template <class T>
+TPoint<T> operator /(typename TId<TPointRef<T>>::TType p, T c) {
+    return {p.x / c, p.y / c};
 }
 
 template <class T>
@@ -326,8 +353,22 @@ struct TLegParamsRef {
     T& ay;
     T& t;
 
-    TPointRef<T> a() const {
-        return {ax, ay};
+    TPointRef<T> a = {ax, ay};
+
+    TLegParamsRef<T>& operator =(const TLegParamsRef<T>& l) {
+        a = l.a;
+        t = l.t;
+        return *this;
+    }
+};
+
+template <class T>
+struct TLegParams {
+    TPoint<T> a;
+    T t;
+
+    operator TLegParamsRef<T>() {
+        return {a.x, a.y, t};
     }
 };
 
@@ -371,18 +412,28 @@ struct TG {
     {}
 
     template<class T>
-    T error(vector<T>& _x) const {
-        TParams<T> x {_x};
-        TPoint<T> p {X[0], X[1]};
-        TPoint<T> v {X[2], X[3]};
-        for (size_t i = 0; i < x.size(); i++) {
-            auto dt = x.l[i].t;
-            auto a = x.l[i].a();
+    T error(vector<T>& x) const {
+        TParams<T> z {x};
+        auto p = P<T>();
+        auto v = V<T>();
+        for (size_t i = 0; i < z.size(); i++) {
+            auto dt = z.l[i].t;
+            auto a = z.l[i].a;
             p += dt * v + 0.5f * dt * dt * a;
             v += dt * a;
         }
 
         return (p*p) + (v*v);
+    }
+
+    template<class T>
+    TPoint<T> P() const {
+        return {X[0], X[1]};
+    }
+
+    template<class T>
+    TPoint<T> V() const {
+        return {X[2], X[3]};
     }
 
     template<class T>
@@ -443,12 +494,68 @@ void FixConstraints(vector<float>& y) { // params...
     }
 }
 
-int main() {
-    //TG G({-50,-40,2,-3});
-    TG G({-5, -4, 2, 1});
-
+vector<float> Init(const TG& G) {
     size_t legs = TParams<float>::size();
-    vector<float> x(legs * 3, 0.1);
+    vector<float> x(legs * 3);
+
+    auto p = G.P<float>();
+    auto v = G.V<float>();
+
+    vector<TLegParams<float>> l(3);
+
+    // stage 1: reduce initial speed
+
+    float vL = sqrt(v * v);
+    auto a1 = l[0].a = -v / vL;
+    auto dt1 = l[0].t = vL;
+    
+    p += dt1 * v + 0.5f * dt1 * dt1 * a1;
+    v += dt1 * a1; // 0.0
+
+    // stage 2: accelerate half way to destination point
+
+    float pL = sqrt(p * p);
+    auto a2 = l[1].a = -p / pL;
+    auto dt2 = l[1].t = sqrt(pL);
+
+    // stage 3: brake other half way to destination point
+
+    l[2].a = -a2;
+    l[2].t = dt2;
+
+    // distribute stages over legs
+    TParams<float> z{x};
+
+    float dt = (dt2 * 2.0 + dt1) / z.size();
+
+    for (size_t i = 0, j = 0; ; ) {
+        if (z.size() - j == l.size() - i) {
+            for (; i < l.size(); i++, j++) {
+                z.l[j] = l[i];
+            }
+            break;
+        }
+
+        if (l[i].t < dt) {
+            z.l[j] = l[i];
+            i++;
+            j++;
+        } else {
+            z.l[j].a = l[i].a;
+            z.l[j].t = dt;
+            l[i].t -= dt;
+            j++;
+        }
+    }
+
+    return x;
+}
+
+vector<float> Compute(const vector<float>& params, bool verbose) {
+    TG G(params);
+
+    vector<float> x = Init(G);
+
     for (size_t n = 0; n < 1000; n++) {
         auto g = AutoDerivative(G, x);
         //cout << g << endl;
@@ -474,10 +581,17 @@ int main() {
             else {
                 break;
             }
+            if (verbose) {
+                cout << x << ": " << G.time(x) << ": " << G.error(x) << endl;
+            }
         }
-        cout << x << ": " << G.time(x) << ": " << G.error(x) << endl;
     }
+    return x;
+}
 
+int main2() {
+    //TG G({-50,-40,2,-3});
+    Compute({5, 4, 2, -3}, true);
     return 0;
 }
 
