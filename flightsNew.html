@@ -142,9 +142,7 @@ function addScript(src) {
 }
 
 function jsonp(json) {
-    document.getElementById("textarea").value =
-          json.route;
-    //    JSON.stringify(json);
+    allFlights[json.ctx.id].replaceRoute(json.route);
 }
 
 function go(id, coords) {
@@ -153,7 +151,7 @@ function go(id, coords) {
     var vx0 = coords.x
     var vy0 = coords.y
     addScript("http://mss.druxa.ru:28080/compute.jsonp" +
-        "?callback=jsonp" +
+        "?callback=jsonp&ctx={" + '"' + "id" + '"' + ":" + id + "}" + 
         "&x0=" + x0 + 
         "&y0=" + y0 +
         "&vx0=" + vx0 + 
@@ -184,9 +182,6 @@ function clickMapReaction(x,y) {
 }
 function searchRoute(id, coords) {
     go(id, coords)
-
-    newRoute = [];
-    return newRoute
 }
 
 function clickPanelReaction(x,y) {
@@ -211,7 +206,7 @@ function main() {
                                              0.5,-x, 1, 0.5, 0, 1.,
                                             -0.5,-x, 1, 0.5,0.,1.];
     goods.countCircles = initData(goods.gl, goods.posIndexCircles, goods.fooIndexCircles, goods.positionsCircles)
-    go(0, new TCoords(0,0));
+   // go(0, new TCoords(1,0));
    drawAll(goods);
    timeGo(goods);
 }
