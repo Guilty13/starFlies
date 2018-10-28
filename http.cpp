@@ -54,10 +54,10 @@ int main()
 
             if (path == "/") {
 
-                ifstream ifs("main.html");
+                ifstream ifs("flightsNew.html"); //"main.html");
                 string str((istreambuf_iterator<char>(ifs)), istreambuf_iterator<char>());
             
-                evbuffer_add_printf(OutBuf, str.c_str());
+                evbuffer_add_printf(OutBuf, "%s", str.c_str());
             } else if (path == "/compute.jsonp") {
 
                 evkeyvalq params;
