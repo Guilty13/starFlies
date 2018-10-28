@@ -9,16 +9,22 @@
 
 <script> 
 //constants
-mapSizeWidth =  720
-mapSizeHeight = 720
+mapSizeX =  720
+mapSizeY = 720
+mapCoordsX = 0 // center
+mapCoordsY = 0 // center
+mapScale = 1/40
+
 timeGlobal = 0
-mapCoordX = 0 // center
-mapCoordY = 0 // center
-frameRate = 30 // per sec
 timeRate = 60 // per sec
-pastCirclesRate = 6 // needed timeRates
-pastCirclesCount = 100
 timeStep = 60 // interval between times (per sec)
+frameRate = 30 // per sec
+
+pastCirclesRate = 30 // needed timeRates
+pastCirclesCount = 20
+
+flightSize  = 0.01;
+circleSize = 0.002;
 
 function combineArrays(x, y) {
     let a = x.slice();
@@ -48,6 +54,9 @@ function cZero() {
 function copyTCoords(x) {
     return new TCoords(x.x, x.y)
 }
+function distance(coordA,coordB) {
+    return sqrt(coordA.x*coordB.x + coordA.y*coordB.y);
+}
 
 
 
@@ -63,7 +72,7 @@ class TFlight {
         this.past[3*i + 2] = timeGlobal
         } // menyat* copipastu
     }
-    putCircle() { // vozmojni problemi s copypastoi
+    putCircle() { 
         let a = [ ]
         for(let i = 3; i < this.past.length; ++i) {
             a[(i-3)] = this.past[i]
@@ -134,7 +143,8 @@ predictedRoute = [ ]
  
  
 window.onload = main
-//window.onclick = clickReaction // onclick(?)
+//window.onclick = clickReaction // onclick(?) 
+//----------------------------------------------------------
 function addScript(src) {
   var elem = document.createElement("script");
   elem.src = src;
@@ -157,13 +167,13 @@ function go(id, coords) {
         "&vx0=" + vx0 + 
         "&vy0=" + vy0);
 } 
+//----------------------------------------------------------
 
-
-function clickReaction(x, y) {
+function clickReaction(coords) {
     if(x <= mapSizeWidth && y <= mapSizsHeight) {clickMapReaction(x,y); return;} else {clickPanelReaction(x,y);}
 }
 
-function clickMapReaction(x,y) {
+function clickMapReaction(coords) {
     if(clickedFlightID != -1 && clickRightButton) { // ?????
         // fix preRoute
         clickedFlightID = -1;
@@ -171,11 +181,11 @@ function clickMapReaction(x,y) {
     }
     if(clickLeftButton) {
         if(clickedFlightID == -1) {
-            clickedFlightID = searchFlight(x, y)
+            clickedFlightID = searchFlight(coords)
             return;
         }
         if(clickedFlightID != -1) {
-                presictedRoute =  searchRoute(clickedFlightID, x, y);
+                presictedRoute =  searchRoute(clickedFlightID, coords);
                 predictedRouteExists = true;
         }
     }
@@ -184,12 +194,23 @@ function searchRoute(id, coords) {
     go(id, coords)
 }
 
-function clickPanelReaction(x,y) {
+function clickPanelReaction(coords) {
     if(predictedRouteExists) {
         allFlights[clickedFlightID].replaceRoute(predictedRoute)
          predictedRouteExists = false;
          clickedFlightID = -1;
     }
+}
+
+function searchFlight(coords) { // napisano ploho, vivodit pervii samolyot esli nescol'co
+    let a = -1;
+    for(let i = 0; i < allFlights.length; ++i) {
+        if(distance(allFlights[i].coords,coords) < flightSize) {
+            a = i;
+            break;
+        }
+    }
+    return a;
 }
 
 function main() {
@@ -219,18 +240,19 @@ function drawDefault(goods) {
 
 //todo: sdelat* po normal*nomu
 function drawCircle(coords, size, goods) {
-    goods.gl.uniform2f(goods.gl.getUniformLocation(goods.programCircles, 'realPos'), coords.x, coords.y)
+    goods.gl.uniform2f(goods.gl.getUniformLocation(goods.programCircles, 'realPos'), (coords.x + mapCoordsX)/mapSizeX, (coords.y + mapCoordsY)/mapSizeY)
     goods.gl.uniform1f(goods.gl.getUniformLocation(goods.programCircles, 'size'), size)
+    goods.gl.uniform1f(goods.gl.getUniformLocation(goods.programCircles, 'scale'), mapScale)
     drawData(goods.gl,goods.countCircles);
 }
 
 function drawAll(goods) {
     drawDefault(goods);
     for(let i = 0; i < allFlights.length; ++i) {
-        drawCircle(allFlights[i].coords,2,goods) // parametri dlya korablya 
+        drawCircle(allFlights[i].coords,flightSize,goods) // parametri dlya korablya 
         
         for(let j = 0; j < pastCirclesCount; ++j) {
-            drawCircle(new TCoords(allFlights[i].past[3*j], allFlights[i].past[3*j+1]), 0.5, goods) // params dlya sledov   
+            drawCircle(new TCoords(allFlights[i].past[3*j], allFlights[i].past[3*j+1]), circleSize, goods) // params dlya sledov   
         } 
     }   /*
     if(clickedFlightID != -1) {
@@ -285,8 +307,8 @@ function drawData(gl,count) {
 
 function initCanvas(id) {
     let elem = document.getElementById(id)
-    elem.width = mapSizeWidth
-    elem.height = mapSizeHeight
+    elem.width = mapSizeX
+    elem.height = mapSizeY
     
     let gl = elem.getContext("webgl")
     
@@ -304,9 +326,10 @@ varying vec3 fs_pos;
 
 uniform vec2 realPos;
 uniform float size;
+uniform float scale;
 
 void main() {
-        gl_Position = vec4((realPos.x+pos.x*size)/10.,(realPos.y+pos.y*size)/10.,0.,pos.z+1.); 
+    gl_Position = vec4((realPos.x+pos.x*size)/scale,(realPos.y+pos.y*size)/scale,0.,pos.z+1.); 
     fs_foo = foo;
     fs_pos = pos;
 }
