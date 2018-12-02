@@ -7,22 +7,50 @@
 <head>
 <script> 
 //constants
-mapSizeX =  720
-mapSizeY = 720
+//mapSizeX = 800
+//mapSizeY = 800
 mapCoordsX = 0 // center
 mapCoordsY = 0 // center
 mapScale = 1/40
 
+class TPoint {
+    constructor(x, y) {
+        this.x = x
+        this.y = y
+    }
+}
+
+var GScaleStep = 1.1
+
+class TView {
+     constructor() {
+         this.shift = new TPoint(400.0, 400.0) // point of real map at (0,0) of the view
+         this.scale = 800 / 50.0
+     }
+}
+
+var GView = new TView();
+
+class TRealPoint extends TPoint {
+}
+
+class TViewPoint extends TPoint {
+}
+
+function remap(x, y) {
+    
+}
+
 timeGlobal = 0
-timeRate = 60 // per sec
+timeRate = 6 // per sec
 timeStep = 60 // interval between times (per sec)
 frameRate = 30 // per sec
 
 pastCirclesRate = 30 // needed timeRates
 pastCirclesCount = 20
 
-flightSize  = 0.01;
-circleSize = 0.002;
+flightSize = 7;
+circleSize = 2;
 
 function combineArrays(x, y) {
     let a = x.slice();
@@ -98,7 +126,7 @@ class TFlight {
                 break;
             }
             this.waitHelper(new TCoords(this.stackDSpeed[3*i],this.stackDSpeed[3*i+1]), this.stackDSpeed[3*i+2])
-           this.stackDSpeed[3*i] = 0;
+            this.stackDSpeed[3*i] = 0;
             this.stackDSpeed[3*i+1] = 0;
             tTime -= this.stackDSpeed[3*i+2]
             this.stackDSpeed[3*i+2] = 0
@@ -154,21 +182,31 @@ function jsonp(json) {
     allFlights[json.ctx.id].replaceRoute(json.route);
 }
 
-function goNow(x,y) {
-    go(0,new TCoords(x,y))
-}
-
 function go(id, coords) {
     var x0 = allFlights[id].coords.x
     var y0 = allFlights[id].coords.y
-    var vx0 = coords.x
-    var vy0 = coords.y
+    var vx0 = allFlights[id].speed.x
+    var vy0 = allFlights[id].speed.y
+
+    var x1 = coords.x
+    var y1 = coords.y
+
+    var route = []
+    var d = Math.sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0))
+    route.push( ((x1-x0)/d - vx0) * 1.e4, ((y1-y0)/d - vy0) * 1.e4, 1.e-4)
+    route.push(0, 0, d)
+    route.push( (-(x1-x0)/d) * 1.e4, (-(y1-y0)/d) * 1.e4, 1.e-4)
+
+    allFlights[id].replaceRoute(route);
+
+    /*
     addScript("http://mss.druxa.ru:28080/compute.jsonp" +
         "?callback=jsonp&ctx={" + '"' + "id" + '"' + ":" + id + "}" + 
         "&x0=" + x0 + 
         "&y0=" + y0 +
         "&vx0=" + vx0 + 
         "&vy0=" + vy0);
+    */
 } 
 //----------------------------------------------------------
 
@@ -216,41 +254,46 @@ function searchFlight(coords) { // napisano ploho, vivodit pervii samolyot esli 
     return a;
 }
 
+var goods = {};
+
 function main() {
     //прорисовка   
-    let goods = {};
-    goods.gl = initCanvas("main")
-    goods.programCircles = initShadersCircles(goods.gl)
-    goods.posIndexCircles = goods.gl.getAttribLocation(goods.programCircles, 'pos')
-    goods.fooIndexCircles = goods.gl.getAttribLocation(goods.programCircles, 'foo')
-    goods.gl.useProgram(goods.programCircles)
+    goods.canvas = initCanvas("main")
+    goods.gl = goods.canvas.getContext("2d")
+
+    //goods.programCircles = initShadersCircles(goods.gl)
+    //goods.posIndexCircles = goods.gl.getAttribLocation(goods.programCircles, 'pos')
+    //goods.fooIndexCircles = goods.gl.getAttribLocation(goods.programCircles, 'foo')
+    //goods.gl.useProgram(goods.programCircles)
     
-    let x = Math.sqrt(3)/6
-    goods.positionsCircles = [ 0.,2*x, 1, 0., 0, 1.,
-                                             0.5,-x, 1, 0.5, 0, 1.,
-                                            -0.5,-x, 1, 0.5,0.,1.];
-    goods.countCircles = initData(goods.gl, goods.posIndexCircles, goods.fooIndexCircles, goods.positionsCircles)
-    go(0, new TCoords(1,0));
-   drawAll(goods);
-   timeGo(goods);
+    //let x = Math.sqrt(3)/6
+    //goods.positionsCircles = [ 0.,2*x, 1, 0., 0, 1.,
+    //                                         0.5,-x, 1, 0.5, 0, 1.,
+    //                                        -0.5,-x, 1, 0.5,0.,1.];
+    //goods.countCircles = initData(goods.gl, goods.posIndexCircles, goods.fooIndexCircles, goods.positionsCircles)
+    
+    go(0, new TCoords(10,15));
+    drawAll(goods);
+    timeGo(goods);
 }
 
 function drawDefault(goods) {
-    goods.gl.clearColor(0,0,0,1)
-    goods.gl.clear(goods.gl.COLOR_BUFFER_BIT)
-  //  wtf.innerHTML = timeGlobal + " " + allFlights[0].coords.x + " " + allFlights[0].coords.y + " " + allFlights[0].stackDSpeed + " " + allFlights[0].past
+    goods.gl.fillStyle = "rgba(0,0,0,1)";
+    goods.gl.fillRect(0, 0, goods.canvas.width, goods.canvas.height)
 }
 
-//todo: sdelat* po normal*nomu
+//todo: goods method
+//todo: color
+//todo: circle!
 function drawCircle(coords, size, goods) {
-    goods.gl.uniform2f(goods.gl.getUniformLocation(goods.programCircles, 'realPos'), (coords.x + mapCoordsX)/mapSizeX, (coords.y + mapCoordsY)/mapSizeY)
-    goods.gl.uniform1f(goods.gl.getUniformLocation(goods.programCircles, 'size'), size)
-    goods.gl.uniform1f(goods.gl.getUniformLocation(goods.programCircles, 'scale'), mapScale)
-    drawData(goods.gl,goods.countCircles);
+    var ctx = goods.gl
+    ctx.fillStyle = "rgba(0,255,0,1)";
+    ctx.fillRect( Math.floor(coords.x * GView.scale + GView.shift.x - size/2.0), Math.floor(coords.y * GView.scale + GView.shift.y - size/2.0), size, size );
 }
 
 function drawAll(goods) {
     drawDefault(goods);
+
     for(let i = 0; i < allFlights.length; ++i) {
         drawCircle(allFlights[i].coords,flightSize,goods) // parametri dlya korablya 
         
@@ -273,8 +316,11 @@ function timeGo(goods) {
             allFlights[i].putCircle();
         }
     }
-    timeGlobal++;
-    setTimeout(function() {timeGo(goods);}, 1000/ timeRate);
+    timeGlobal += 1.0
+    timeRate = Math.exp((timePace + 10) / 5.0) //FIXME: remove +10
+    setTimeout( function() {
+        timeGo(goods)
+    }, 1000 / timeRate)
 }
 
 function initData(gl, posIndex, fooIndex, positions) {
@@ -310,15 +356,10 @@ function drawData(gl,count) {
 
 function initCanvas(id) {
     let elem = document.getElementById(id)
-    elem.width = mapSizeX
-    elem.height = mapSizeY
-    
-    let gl = elem.getContext("webgl")
-    
-    gl.clearColor(1,0,0,1) // param
-    gl.clear(gl.COLOR_BUFFER_BIT)
-    
-    return gl;
+    console.log(elem.height, elem.clientHeight, elem.scrollHeight, elem.offsetHeight, elem.innerHeight, elem.outerHeight)
+    elem.width = elem.clientWidth
+    elem.height = elem.clientHeight
+    return elem
 }
 /////////////SHADERS BEGIN
 let VS_SRC_CIRCLE = `
@@ -381,10 +422,11 @@ function initShadersCircles(gl) {
 
 <body>
 <div style="position: absolute; top: 0; right: 0; bottom: 0; left: 0;">
-<table border="solid 1px" height="100%" width="100%">
+<!--<table border="solid 1px" height="100%" width="100%">-->
+<table style="border: solid 1px; height: 100%; width: 100%">
 <tr>
-<td style="vertical-align: top" width="70%">
-<canvas id = "main"></canvas>
+<td id="_main" style="vertical-align: top" width="70%">
+<canvas id="main" style="width: 100%; height: 100%; border: 0px; display: block"></canvas>
 </td>
 <td style="vertical-align: top">
 
@@ -404,7 +446,7 @@ Ship destination: X: <input id="destinationX" type="text" value="0"/> Y: <input 
 </table>
 
 <script>
-    timePace = 0;
+    var timePace = 0;
     function syncTimePace() {
         var e = document.getElementById("timePace")
         e.innerHTML = timePace;
@@ -418,6 +460,45 @@ Ship destination: X: <input id="destinationX" type="text" value="0"/> Y: <input 
         timePace++;
         syncTimePace();
     }
-    document.getElementById("goToDest").onclick = function(event) {go(0, new TCoords(document.getElementById("destinationX").value, document.getElementById("destinationY").value));}
+    document.getElementById("goToDest").onclick = function(e) {
+        go(0, new TCoords(document.getElementById("destinationX").value, document.getElementById("destinationY").value));
+    }
+
+    // view:
+
+    document.getElementById("main").onclick = function(e) {
+        let x = (e.offsetX - GView.shift.x) / GView.scale
+        let y = (e.offsetY - GView.shift.y) / GView.scale
+                        
+        document.getElementById("destinationX").value = x
+        document.getElementById("destinationY").value = y
+    }
+    document.getElementById("main").onwheel = function(e) {
+
+        let x = (e.offsetX - GView.shift.x) / GView.scale
+        let y = (e.offsetY - GView.shift.y) / GView.scale
+
+        if (e.deltaY < 0) {
+            GView.scale *= GScaleStep
+        } else {
+            GView.scale /= GScaleStep
+        }
+
+        GView.shift.x = e.offsetX - x * GView.scale
+        GView.shift.y = e.offsetY - y * GView.scale
+    }
+    document.getElementById("main").onmousemove = function(e) {
+        //FIXME: safari does not support e.buttons
+        if (e.buttons & 1) {
+            let x = (e.offsetX - e.movementX - GView.shift.x) / GView.scale
+            let y = (e.offsetY - e.movementY - GView.shift.y) / GView.scale
+            GView.shift.x = e.offsetX - x * GView.scale
+            GView.shift.y = e.offsetY - y * GView.scale
+        }
+    }
+    document.body.onresize = function(e) {
+        initCanvas("main")
+    }
+
 </script>
 </div>
