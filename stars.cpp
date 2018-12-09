@@ -406,6 +406,7 @@ struct TG {
 
     vector<float> X;
     //[px,py,vx,vy]
+    float tradeoff = 1.0f;
 
     TG(const vector<float>& X)
     : X(X)
@@ -445,7 +446,7 @@ struct TG {
     template<class T>
     T operator()(vector<T>& x) const {
         
-        return - error(x) - 0.1f * time(x);
+        return - error(x) - tradeoff * time(x);
         /*
         //[ax1,ay1,t1,ax2,ay2,t2];
         auto& px0 = X[0];
@@ -556,42 +557,50 @@ vector<float> Compute(const vector<float>& params, bool verbose) {
 
     vector<float> x = Init(G);
 
-    for (size_t n = 0; n < 1000; n++) {
-        auto g = AutoDerivative(G, x);
-        //cout << g << endl;
+    for (size_t m = 0; m < 30; m++) {
+        for (size_t n = 0; n < 100; n++) {
+            auto g = AutoDerivative(G, x);
+            //cout << g << endl;
 
-        float s = 1e-3;
-        vector<float> y;
-        vector<float> x0 = x;
-        float r = G(x);
+            float s = 1e-3;
+            vector<float> y;
+            vector<float> x0 = x;
+            float r = G(x);
 
-        while (true) {
-            y = x0;
-            for (auto& d: g.DX) {
-                y[d.I] += s * d.D;
-            }
+            while (true) {
+                y = x0;
+                for (auto& d: g.DX) {
+                    y[d.I] += s * d.D;
+                }
 
-            FixConstraints(y);
+                FixConstraints(y);
 
-            if (r < G(y)) {
-                r = G(y);
-                x = y;
-                s *= 2;
-            }
-            else {
-                break;
-            }
-            if (verbose) {
-                cout << x << ": " << G.time(x) << ": " << G.error(x) << endl;
+                if (r < G(y)) {
+                    r = G(y);
+                    x = y;
+                    s *= 2;
+                }
+                else {
+                    break;
+                }
+                if (verbose) {
+                    cout << x << ": " << G.time(x) << ": " << G.error(x) << endl;
+                }
             }
         }
+        G.tradeoff /= 2.0f;
     }
     return x;
 }
 
 int main2() {
     //TG G({-50,-40,2,-3});
-    Compute({5, 4, 2, -3}, true);
+    float x = getenv("X") ? atof(getenv("X")) : 0.0f;
+    float y = getenv("Y") ? atof(getenv("Y")) : 0.0f;
+    float vx = getenv("VX") ? atof(getenv("VX")) : -1.0f;
+    float vy = getenv("VY") ? atof(getenv("VY")) : 1.0f;
+
+    Compute({x, y, vx, vy}, true);
     return 0;
 }
 

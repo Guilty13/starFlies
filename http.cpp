@@ -72,6 +72,8 @@ int main()
                 float y0 = atof(evhttp_find_header(&params, "y0"));
                 float vx0 = atof(evhttp_find_header(&params, "vx0"));
                 float vy0 = atof(evhttp_find_header(&params, "vy0"));
+                cerr << "X=" << x0 << " Y=" << y0 << " VX=" << vx0 << " VY=" << vy0 << endl;
+
                 auto ctx = evhttp_find_header(&params, "ctx");
                 auto route = Compute({x0,y0,vx0,vy0});
 
