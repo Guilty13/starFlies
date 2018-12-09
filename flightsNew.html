@@ -21,8 +21,8 @@ let GScaleStep = 1.1
 
 class TView {
      constructor() {
-         this.shift = new TPoint(400.0, 400.0) // point of real map at (0,0) of the view
-         this.scale = 800 / 10.0
+         this.shift = new TPoint(500.0, 500.0)
+         this.scale = 10.0
      }
 }
 
@@ -35,6 +35,9 @@ let frameRate = 50 // per sec
 let GTraceRate = 0.1
 let GTraceDepth = 100
 let GShipSize = 7;
+let GShipColor = "green"
+let GAsteriodSize = 13
+let GAsteriodColor = "gray"
 let GTraceSize = 2;
 
 function combineArrays(x, y) {
@@ -85,7 +88,6 @@ function sinh(x) {
     return 0.5 * (Math.exp(x) - Math.exp(-x))
 }
 
-
 function f2(t) {
     return 1.0 / Math.sqrt(1.0 + t*t)
 }
@@ -112,8 +114,8 @@ function g(t) {
 
 // do nothing for a period of time
 class DefaultRouteLeg {
-    constructor(time = 1.0) {
-        this.time = 1.0
+    constructor(time = Infinity) {
+        this.time = time
     }
 
     init(state) {
@@ -135,6 +137,7 @@ class DefaultRouteLeg {
         state.t += dt
     }
 }
+let GDefaultRouteLeg = new DefaultRouteLeg()
 
 class TRouteLeg {
     constructor(alpha, theta, taus = null) {
@@ -298,10 +301,8 @@ function blabla(a1) {
     GShips[2].state.p = p
 }
 
-function BuildBangBangRoute(state, target) {
-
-    let delta = new TPoint(target.x - state.p.x, target.y - state.p.y)
-    let v = state.v
+function BuildBangBangRoute(v, delta) {
+	//state, target) {
 
     let tApprox = (Dst2(delta) * 4)**(0.25)
 
@@ -646,14 +647,52 @@ function Delta2AlphaTheta(delta) {
     }
 }
 
-class TShip {
+class TCelestialBody {
     constructor(state) {
         this.state = state
-        this.destination = null // TState
-        //this.thrust = new TPoint(0.0, 0.0) // acceleration
-        this.route = []
         this.trace = []
+		this.size = 1.0 //override!
         this.nextTrace = this.state.t
+    }
+
+    waitStep(dt) {
+        GDefaultRouteLeg.update(this.state, dt)
+    }
+
+    wait(dT) {
+
+        for (;;) {
+
+            if (this.state.t + dT < this.nextTrace) {
+                this.waitStep(dT)
+                break;
+            } else {
+                let dt = this.nextTrace - this.state.t
+                this.waitStep(dt)
+                dT -= dt
+                this.trace.push(new TPoint(this.state.p.x, this.state.p.y))
+                if (this.trace.length > GTraceDepth) {
+                    this.trace.shift()
+                }
+                this.nextTrace += GTraceRate
+            }
+        }
+    }
+}
+
+class TAsteroids extends TCelestialBody {
+	constructor(state) {
+		super(state)
+		this.size = GAsteriodSize
+	    // TODO: geology traits and state
+	}
+}
+
+class TShip extends TCelestialBody {
+    constructor(state) {
+        super(state)
+		this.size = GShipSize
+        this.route = []
     }
 
     waitStep(dt) {
@@ -671,11 +710,11 @@ class TShip {
                 return 
             }
         }
-        let r = new DefaultRouteLeg(dt)
-        r.update(state, dt)
+        GDefaultRouteLeg.update(state, dt)
     }
         
-    waitStep2(dt) {
+    // FIXME: move to TOptimalRouteLeg
+    waitStep1(dt) {
         let state = this.state
         let t = state.t
         state.t += dt
@@ -710,48 +749,11 @@ class TShip {
         }
     }
 
-
-    
-    waitStep1(dt) {
-
-
-        let state = this.state
-
-        state.t += dt
-        let t = state.t
-
-        state.p.x = t * arcsinh(t) - Math.sqrt(1 + t*t)
-        state.p.y = 0.5 * (t * Math.sqrt(1 + t*t) + arcsinh(t))
-        
-        state.v.x = arcsinh(t)
-        state.v.y = Math.sqrt(1 + t*t) 
-
-        this.thrust.x = 1.0 / Math.sqrt(1 + t*t)
-        this.thrust.y = t / Math.sqrt(1 + t*t)
-    }
-
-    wait(dT) {
-
-        for (;;) {
-
-            if (this.state.t + dT < this.nextTrace) {
-                this.waitStep(dT)
-                break;
-            } else {
-                let dt = this.nextTrace - this.state.t
-                this.waitStep(dt)
-                dT -= dt
-                this.trace.push(new TPoint(this.state.p.x, this.state.p.y))
-                if (this.trace.length > GTraceDepth) {
-                    this.trace.shift()
-                }
-                this.nextTrace += GTraceRate
-            }
-        }
-    }
-
     replaceRoute(route) {
         this.route = route
+    }
+    addRoute(route) {
+        this.route.push.apply(this.route, route) //KMP
     }
 }
 
@@ -762,20 +764,32 @@ let GShips = [
         new TPoint(-1, 0), //u2-u1=1 v2-v1=0
     )),
 
-    /*
     new TShip(new TState(
         0.0,
-        new TPoint(-0.5, 0),
-        new TPoint(0, 0), //u2-u1=1 v2-v1=0
+        new TPoint(0, 0),
+        new TPoint(1, 0), //u2-u1=1 v2-v1=0
     )),
 
     new TShip(new TState(
         0.0,
         new TPoint(0, 0),
-        new TPoint(0, 0), //u2-u1=1 v2-v1=0
+        new TPoint(1, -1), //u2-u1=1 v2-v1=0
     ))
-    */
 ]
+
+function GammaRandom() {
+    // Gamma(1) distribution
+    return -Math.log(Math.random())
+}
+
+let GAsteroids = []
+for (let i = 0; i < 100; i++) {
+    GAsteroids.push(new TAsteroids(new TState(
+        0.0,
+        new TPoint( 1000 * (Math.random() - 0.5), 1000 * (Math.random() - 0.5) ),
+        new TPoint( GammaRandom() * (Math.random() - 0.5), GammaRandom() * (Math.random() - 0.5) ),
+    )))
+}
 
 //GShips[0].replaceRoute([new TConstantThrustRouteLeg(1.2, 2.0), new TConstantThrustRouteLeg(-1.5, 3.0)])
 
@@ -801,10 +815,38 @@ function jsonp(json) {
     GShips[json.ctx.id].replaceRoute(json.route);
 }
 
-function goPsi(id, coords) {
+function goPsi(id, p, enqueue) {
     let ship = GShips[id]
-    let route = BuildBangBangRoute(ship.state, coords)
-    ship.replaceRoute(route)
+	let state = ship.state
+
+    let delta = new TPoint(p.x - state.p.x, p.y - state.p.y)
+    let route = BuildBangBangRoute(state.v, delta)
+	if (enqueue) {
+		// TODO: add to queue and reroute later
+		ship.addRoute(route)
+	} else {
+	    ship.replaceRoute(route)
+	}
+}
+
+function goPsiObj(id, obj, enqueue) {
+	// Asteriods support only
+	// TODO: intercept a ship?!
+
+	let ship = GShips[id]
+	let shipV = ship.state.v
+	let objV = obj.state.v
+	let dv = new TPoint(shipV.x - objV.x, shipV.y - objV.y)
+	let delta = new TPoint(obj.state.p.x - ship.state.p.x, obj.state.p.y - ship.state.p.y)
+	
+	let route = BuildBangBangRoute(dv, delta)
+
+	if (enqueue) {
+		// TODO: add to queue and reroute later
+		ship.addRoute(route)
+	} else {
+	    ship.replaceRoute(route)
+	}
 }
 
 function goAlphaTheta(alpha, theta) {
@@ -910,15 +952,30 @@ function clickPanelReaction(coords) {
     }
 }
 
-function searchFlight(coords) { // napisano ploho, vivodit pervii samolyot esli nescol'co
-    let a = -1;
+//FIXME: TView method!!
+function ViewRemap(p) {
+	return new TPoint(p.x * GView.scale + GView.shift.x, p.y * GView.scale + GView.shift.y)
+}
+
+function FindObjects(coords) {
+
+	//let x = (e.offsetX - GView.shift.x) / GView.scale
+	//let y = (e.offsetY - GView.shift.y) / GView.scale
+
+	let found = []
     for(let i = 0; i < GShips.length; ++i) {
-        if(distance(GShips[i].coords,coords) < GShipSize) {
-            a = i;
-            break;
+		let obj = GShips[i]
+        if(Dst2(ViewRemap(obj.state.p), coords) < obj.size*obj.size) {
+            found.push(obj)
         }
     }
-    return a;
+    for(let i in GAsteroids) {
+		let obj = GAsteroids[i]
+        if(Dst2(ViewRemap(obj.state.p), coords) < obj.size*obj.size) {
+            found.push(obj)
+        }
+    }
+    return found;
 }
 
 let goods = {};
@@ -943,7 +1000,6 @@ function drawDefault(goods) {
 //todo: circle!
 function drawCircle(coords, size, goods) {
     let ctx = goods.gl
-    ctx.fillStyle = "rgba(0,200,0,1)";
     ctx.fillRect( coords.x * GView.scale + GView.shift.x - size/2.0, coords.y * GView.scale + GView.shift.y - size/2.0, size, size );
 }
 
@@ -956,22 +1012,32 @@ function drawLine(from, dir, goods) {
     ctx.stroke();
 }
 
+function drawCelestialBody(body, goods) {
+	let state = body.state
+	drawCircle(state.p, body.size, goods)
+
+	for(let j = 0; j < body.trace.length; j++) {
+		drawCircle(body.trace[j], GTraceSize, goods)
+	}
+}
 
 function drawAll(goods) {
     initCanvas("main")
     drawDefault(goods);
 
-    for(let i = 0; i < GShips.length; ++i) {
-        let state = GShips[i].state
-        drawCircle(state.p, GShipSize, goods) // parametri dlya korablya 
-        if (state.thrust) {
-            drawLine(state.p, state.thrust, goods)
-        }
-        
-        for(let j = 0; j < GShips[i].trace.length; j++) {
-            drawCircle(GShips[i].trace[j], GTraceSize, goods)
-        } 
+	goods.gl.fillStyle = GAsteriodColor
+    for(let i = 0; i < GAsteroids.length; ++i) {
+		drawCelestialBody(GAsteroids[i], goods)
     }
+
+	goods.gl.fillStyle = GShipColor
+    for(let i = 0; i < GShips.length; ++i) {
+		drawCelestialBody(GShips[i], goods)
+        if (GShips[i].state.thrust) {
+            drawLine(GShips[i].state.p, GShips[i].state.thrust, goods)
+        }
+    }
+
     setTimeout(function() {drawAll(goods);}, 1000 / frameRate);
 }
 
@@ -993,13 +1059,16 @@ function genHTML(json) {
 }
 
 function timeGo(goods) {
-    for(let i = 0; i<GShips.length; ++i) {
-        GShips[i].wait(1/timeStep);
+    for(let i = 0; i < GShips.length; ++i) {
+        GShips[i].wait(1. / timeStep);
+    }
+    for(let i = 0; i < GAsteroids.length; ++i) {
+        GAsteroids[i].wait(1. / timeStep);
     }
 
     let dbg = document.getElementById("debug")
     let st = GShips[0].state
-    dbg.innerHTML = genHTML(GShips[0])
+    dbg.innerHTML = genHTML({ "state": GShips[0].state, "route": GShips[0].route })
     // JSON.stringify(GShips[0], null, ' ')
 
     timeGlobal += 1.0
@@ -1085,8 +1154,17 @@ Ship destination: Alpha: <input id="Alpha" type="text" value="8"/> Theta: <input
         document.getElementById("destinationY").value = y
 
         //if (e.ctrlKey) {
-            goPsi(0, new TCoords(document.getElementById("destinationX").value, document.getElementById("destinationY").value))
-        //}
+		let dst = new TCoords(document.getElementById("destinationX").value, document.getElementById("destinationY").value)
+		let dstObjs = FindObjects(new TCoords(e.offsetX, e.offsetY))
+
+		// TODO: menu to pick a choise
+		if (dstObjs.length == 0) {
+			goPsi(0, dst) //, e.shiftKey)
+		} else {
+			goPsiObj(0, dstObjs[0]) //, e.shiftKey)
+		}
+		
+        //goPsi(0, new TCoords(document.getElementById("destinationX").value, document.getElementById("destinationY").value))
     }
 
     document.getElementById("main").onwheel = function(e) {
