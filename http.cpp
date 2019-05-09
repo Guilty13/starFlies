@@ -54,7 +54,17 @@ int main()
 
             if (path == "/") {
 
-                ifstream ifs("flightsNew.html"); //"main.html");
+                ifstream ifs("main.html");
+                string str((istreambuf_iterator<char>(ifs)), istreambuf_iterator<char>());
+            
+                evbuffer_add_printf(OutBuf, "%s", str.c_str());
+            } else if (path == "/v1.html") {
+                ifstream ifs("v1.html");
+                string str((istreambuf_iterator<char>(ifs)), istreambuf_iterator<char>());
+            
+                evbuffer_add_printf(OutBuf, "%s", str.c_str());
+            } else if (path == "/v2.html") {
+                ifstream ifs("v2.html");
                 string str((istreambuf_iterator<char>(ifs)), istreambuf_iterator<char>());
             
                 evbuffer_add_printf(OutBuf, "%s", str.c_str());
