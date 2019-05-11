@@ -1217,15 +1217,7 @@ function runBots() {
     for (let k = 1; k < GPlayers.length; k++) {
         let ship = GShips[k] //FIMXE: find all _my_ ships
         if (ship.route.length) {
-            if (!ship.delay) {
-                ship.delay = 0
-            }
-            ship.delay++
-            if (ship.delay > 75) {
-                ship.delay = 0
-            } else {
-                continue 
-            }
+            continue //FIXME: recheck every N seconds!
         }
 
         let bestScore = 0
